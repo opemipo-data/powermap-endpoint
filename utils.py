@@ -15,13 +15,16 @@ __all__ = [
     "get_lookback_range",
     "get_month_range",
     "geocode_nominatim",
+    "geocode_nominatim_reverse",
 ]
 
 
 def validate_feeder_match_request(body: FeederMatchRequest) -> None:
     """Validate a feeder match request body. Raises ValueError on failure."""
-    if not body.address.strip():
-        raise ValueError("address must not be empty")
+    has_address = bool(body.address and body.address.strip())
+    has_coords = body.lat is not None and body.lng is not None
+    if not has_address and not has_coords:
+        raise ValueError("provide either address or both lat and lng")
 
 
 def validate_supply_request(body: SupplyRequest) -> None:
@@ -99,6 +102,36 @@ def geocode_nominatim(address):
     r = results[0]
     addr = r.get("address", {})
 
+    return {
+        "formatted": r.get("display_name"),
+        "lat": float(r["lat"]),
+        "lng": float(r["lon"]),
+        "route": addr.get("road"),
+        "neighborhood": addr.get("neighbourhood") or addr.get("suburb"),
+        "sublocality": addr.get("city_district") or addr.get("suburb"),
+        "lga": addr.get("county") or addr.get("city"),
+        "state": addr.get("state"),
+    }
+
+
+def geocode_nominatim_reverse(lat: float, lng: float):
+    url = "https://nominatim.openstreetmap.org/reverse"
+    params = {
+        "lat": lat,
+        "lon": lng,
+        "format": "jsonv2",
+        "addressdetails": 1,
+    }
+    headers = {"User-Agent": "PowerFeed/1.0"}
+
+    response = requests.get(url, params=params, headers=headers)
+    response.raise_for_status()
+    r = response.json()
+
+    if "error" in r:
+        return None
+
+    addr = r.get("address", {})
     return {
         "formatted": r.get("display_name"),
         "lat": float(r["lat"]),

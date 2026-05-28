@@ -15,6 +15,8 @@ class GeocodedLocation(BaseModel):
 class Feeder(BaseModel):
     feeder_id: int
     feeder_name: str
+    disco: str
+    band: str
     location: Optional[str] = None
     street: Optional[str] = None
     match_score: float
@@ -23,7 +25,15 @@ class Feeder(BaseModel):
 class FeederMatchResponse(BaseModel):
     address: str
     geocoded: GeocodedLocation
-    feeders: List[Feeder]
+    feeder: Feeder
+
+
+class LocationDetailsResponse(BaseModel):
+    address: str
+    geocoded: GeocodedLocation
+    feeder: int
+    disco: str
+    band: str
 
 
 class DailySupplyEntry(BaseModel):
@@ -53,3 +63,15 @@ class StateAverageResponse(BaseModel):
     start_date: str
     end_date: str
     average_hours_of_supply: float
+
+
+class TariffEstimateResponse(BaseModel):
+    disco: str
+    band: str
+    min_monthly_cost: float
+    max_monthly_cost: float
+
+
+class AppliancesByCategoryResponse(BaseModel):
+    category: str
+    appliances: List[str]

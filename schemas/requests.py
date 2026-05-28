@@ -1,6 +1,6 @@
 import datetime
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -15,7 +15,9 @@ class Lookback(str, Enum):
 
 
 class FeederMatchRequest(BaseModel):
-    address: str
+    address: Optional[str] = None
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class _DateRangeRequest(BaseModel):
@@ -41,3 +43,16 @@ class LgaAverageRequest(_DateRangeRequest):
 
 class StateAverageRequest(_DateRangeRequest):
     state: str
+
+
+class ApplianceUsage(BaseModel):
+    appliance: str
+    min_daily_hours: float = Field(gt=0, le=24)
+    max_daily_hours: float = Field(gt=0, le=24)
+    qty: int = Field(ge=1)
+
+
+class TariffEstimateRequest(BaseModel):
+    disco: str
+    band: str
+    appliances: List[ApplianceUsage]
