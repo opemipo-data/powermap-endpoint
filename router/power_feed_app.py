@@ -30,7 +30,9 @@ from sql.powerfeed_query import get_supply_in_range
 from utils import geocode_nominatim, geocode_nominatim_reverse, get_lookback_range, validate_feeder_match_request, validate_supply_request
 
 app = FastAPI(title="PowerFeed API")
-
+@app.get("/")
+def health_check():
+    return {"status": "ok", "service": "PowerFeed API", "version": "0.1.0"}
 
 @app.exception_handler(Exception)
 async def global_catch_all_handler(request: Request, exc: Exception):
