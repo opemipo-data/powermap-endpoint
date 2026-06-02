@@ -226,3 +226,4 @@ def location_details(body: FeederMatchRequest):
         "disco": res["feeder"]["disco"],
         "band": res["feeder"]["band"]
     }
+    
