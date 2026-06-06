@@ -28,7 +28,7 @@ from core import get_supabase_client
 from schemas import AppliancesByCategoryResponse, FeederMatchRequest, FeederMatchResponse, LgaAverageRequest, LgaAverageResponse, LocationDetailsResponse, StateAverageRequest, StateAverageResponse, SupplyRequest, SupplyResponse, TariffEstimateRequest, TariffEstimateResponse
 from sql.feeder_lookup import match_feeders, resolve_adm2_pcode
 from sql.powerfeed_query import get_supply_in_range
-from utils import geocode_nominatim, geocode_nominatim_reverse, get_lookback_range, validate_feeder_match_request, validate_supply_request
+from utils import geocode_nominatim, geocode_location, get_lookback_range, validate_feeder_match_request, validate_supply_request
 
 app = FastAPI(title="PowerFeed API")
 
@@ -66,12 +66,12 @@ def find_feeder_for_address(body: FeederMatchRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
     if body.lat is not None and body.lng is not None:
-        geo = geocode_nominatim_reverse(body.lat, body.lng)
+        geo = geocode_location(body.lat, body.lng)
     else:
         geo = geocode_nominatim(body.address)
     if not geo:
         raise HTTPException(status_code=422, detail="Location could not be geocoded")
-
+    print(geo.get("lga"));
     adm2_pcode = resolve_adm2_pcode(geo.get("lga"))
     if not adm2_pcode:
         raise HTTPException(status_code=404, detail="Could not resolve LGA for this address")

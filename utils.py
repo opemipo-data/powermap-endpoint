@@ -1,10 +1,14 @@
 import calendar
 import datetime
+import os
 from typing import Optional
 
 import requests
+from dotenv import load_dotenv
 
 from schemas.requests import FeederMatchRequest, Lookback, SupplyRequest
+
+load_dotenv()
 
 __all__ = [
     "FeederMatchRequest",
@@ -15,7 +19,7 @@ __all__ = [
     "get_lookback_range",
     "get_month_range",
     "geocode_nominatim",
-    "geocode_nominatim_reverse",
+    "geocode_location",
 ]
 
 
@@ -144,13 +148,13 @@ def geocode_nominatim_reverse(lat: float, lng: float):
     }
 
 
-def geocode_location(address, api_key, region="ng"):
+def geocode_location(lat: float, lng: float):
+    api_key = os.getenv("API_KEY")
     url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {
-        "address": address,
+        "latlng": f"{lat},{lng}",
         "key": api_key,
-        "region": region,
-        "components": "country:NG",
+        "result_type": "street_address|route|neighborhood|sublocality|locality|administrative_area_level_2",
     }
 
     response = requests.get(url, params=params)
@@ -161,6 +165,9 @@ def geocode_location(address, api_key, region="ng"):
         return None
 
     result = data["results"][0]
+    
+    print(result)  # Debugging statement
+    
     components = result["address_components"]
     geometry = result["geometry"]["location"]
 
@@ -175,8 +182,7 @@ def geocode_location(address, api_key, region="ng"):
         "lng": geometry["lng"],
         "route": type_map.get("route"),
         "neighborhood": type_map.get("neighborhood"),
-        "sublocality": type_map.get("sublocality")
-            or type_map.get("sublocality_level_1"),
+        "sublocality": type_map.get("sublocality") or type_map.get("sublocality_level_1"),
         "lga": type_map.get("administrative_area_level_2"),
         "state": type_map.get("administrative_area_level_1"),
     }

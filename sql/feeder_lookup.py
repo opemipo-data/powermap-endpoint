@@ -16,11 +16,16 @@ def _resolve_client(client):
 def resolve_adm2_pcode(lga_name: str, client=None) -> str | None:
     if not lga_name:
         return None
+    # Normalize: try both space and hyphen variants so "Eti Osa" matches "ETI-OSA"
+    normalized = lga_name.strip()
+    alt = normalized.replace(" ", "-") if " " in normalized else normalized.replace("-", " ")
+    patterns = {normalized, alt}
+    filter_expr = ",".join(f"adm2_name.ilike.%{p}%" for p in patterns)
     response = (
         _resolve_client(client)
         .table("lgas")
         .select("adm2_pcode")
-        .ilike("adm2_name", f"%{lga_name}%")
+        .or_(filter_expr)
         .limit(1)
         .execute()
     )
