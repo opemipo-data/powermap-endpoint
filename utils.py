@@ -166,8 +166,6 @@ def geocode_location(lat: float, lng: float):
 
     result = data["results"][0]
     
-    print(result)  # Debugging statement
-    
     components = result["address_components"]
     geometry = result["geometry"]["location"]
 
