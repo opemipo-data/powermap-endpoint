@@ -71,7 +71,6 @@ def find_feeder_for_address(body: FeederMatchRequest):
         geo = geocode_nominatim(body.address)
     if not geo:
         raise HTTPException(status_code=422, detail="Location could not be geocoded")
-    print(geo.get("lga"));
     adm2_pcode = resolve_adm2_pcode(geo.get("lga"))
     if not adm2_pcode:
         raise HTTPException(status_code=404, detail="Could not resolve LGA for this address")
@@ -227,7 +226,6 @@ def tariff_estimate(body: TariffEstimateRequest):
 def location_details(body: FeederMatchRequest):
     """Return details about a specific location."""
     res: FeederMatchResponse = find_feeder_for_address(body)
-    print(res)
 
     return {
         "address": res["address"],
