@@ -26,7 +26,7 @@ FEEDER_COL = "feeder_id"
 DATE_COL = "date"
 HOURS_COL = "hours_of_supply"
 
-ESTIMATION_WINDOW = 14  # number of trailing days used to compute the moving average
+SAME_WEEKDAY_WEEKS = 2  # number of prior same-weekday values to average for estimation
 ESTIMATION_CAP = 30     # max days forward we will project beyond last real data point
 
 
@@ -56,28 +56,14 @@ def _average(rows):
     return round(sum(hours) / len(hours), 2)
 
 
-def _fetch_pre_range(feeder_id, before_date, n, client):
-    """Fetch up to n rows immediately before before_date, oldest first."""
-    response = (
-        _resolve_client(client)
-        .table(TABLE)
-        .select(f"{DATE_COL},{HOURS_COL}")
-        .eq(FEEDER_COL, feeder_id)
-        .lt(DATE_COL, before_date.isoformat())
-        .order(DATE_COL, desc=True)
-        .limit(n)
-        .execute()
-    )
-    return list(reversed(response.data or []))
-
-
 def _fill_missing_dates(rows, start_date, end_date, last_real_date, pre_rows=None):
     """Append estimated rows for dates after the last real data point.
 
-    Uses a rolling moving average of up to ESTIMATION_WINDOW rows.
-    pre_rows pad the window when in-range rows are fewer than ESTIMATION_WINDOW.
-    When last_real_date is before start_date (entire range is a gap), the loop
-    runs ghost iterations to keep the window rolling before outputting anything.
+    Each missing date is estimated by averaging the supply on the same weekday
+    from the previous SAME_WEEKDAY_WEEKS weeks (e.g. if today is Saturday, uses
+    last Saturday and the Saturday before that). Falls back gracefully when some
+    anchor days have no data. Estimated values are stored in the lookup so they
+    can serve as anchors for dates further out.
     Projects at most ESTIMATION_CAP days beyond last_real_date.
     Estimated rows carry {"estimated": True}; real rows get {"estimated": False}.
     """
@@ -89,19 +75,30 @@ def _fill_missing_dates(rows, start_date, end_date, last_real_date, pre_rows=Non
 
     projection_end = min(end_date, last_real_date + datetime.timedelta(days=ESTIMATION_CAP))
     if projection_end < start_date:
-        return rows  # gap is beyond cap, nothing to estimate in range
+        return rows
 
-    window_source = (pre_rows or []) + rows
-    window = [r[HOURS_COL] for r in window_source[-ESTIMATION_WINDOW:] if r.get(HOURS_COL) is not None]
-    if not window:
+    # Build a date-keyed lookup from all real data (pre_rows + in-range rows)
+    date_lookup: dict[datetime.date, float] = {
+        datetime.date.fromisoformat(r[DATE_COL]): r[HOURS_COL]
+        for r in (pre_rows or []) + rows
+        if r.get(HOURS_COL) is not None
+    }
+
+    if not date_lookup:
         return rows
 
     current = last_real_date + datetime.timedelta(days=1)
     while current <= projection_end:
-        estimate = round(sum(window) / len(window), 2)
-        if current >= start_date:
-            rows.append({DATE_COL: current.isoformat(), HOURS_COL: estimate, "estimated": True})
-        window = window[1:] + [estimate]
+        anchor_values = [
+            date_lookup[current - datetime.timedelta(weeks=w)]
+            for w in range(1, SAME_WEEKDAY_WEEKS + 1)
+            if (current - datetime.timedelta(weeks=w)) in date_lookup
+        ]
+        if anchor_values:
+            estimate = round(sum(anchor_values) / len(anchor_values), 2)
+            if current >= start_date:
+                rows.append({DATE_COL: current.isoformat(), HOURS_COL: estimate, "estimated": True})
+            date_lookup[current] = estimate  # allow cascading anchors for further projections
         current += datetime.timedelta(days=1)
 
     return rows
@@ -130,13 +127,21 @@ def get_supply_in_range(feeder_id, start_date, end_date, client=None):
 
     if rows:
         last_real_date = datetime.date.fromisoformat(rows[-1][DATE_COL])
-        if last_real_date < end_date and len(rows) < ESTIMATION_WINDOW:
-            needed = ESTIMATION_WINDOW - len(rows)
-            pre_rows = _fetch_pre_range(feeder_id, start_date, needed, client)
-    else:
-        pre_rows = _fetch_pre_range(feeder_id, start_date, ESTIMATION_WINDOW, client)
-        if pre_rows:
-            last_real_date = datetime.date.fromisoformat(pre_rows[-1][DATE_COL])
+
+    if last_real_date is None or last_real_date < end_date:
+        # Estimation will be needed — fetch the anchor window: SAME_WEEKDAY_WEEKS*7 days
+        # ending at last_real_date (or before start_date when there are no in-range rows).
+        first_estimated = (last_real_date + datetime.timedelta(days=1)) if last_real_date else start_date
+        anchor_start = first_estimated - datetime.timedelta(weeks=SAME_WEEKDAY_WEEKS)
+
+        if last_real_date is None:
+            # No in-range data — fetch real rows from the anchor window before start_date
+            pre_rows = _fetch_range(feeder_id, anchor_start, start_date - datetime.timedelta(days=1), client)
+            if pre_rows:
+                last_real_date = datetime.date.fromisoformat(pre_rows[-1][DATE_COL])
+        elif anchor_start < start_date:
+            # Some anchor dates fall before the requested range
+            pre_rows = _fetch_range(feeder_id, anchor_start, start_date - datetime.timedelta(days=1), client)
 
     if last_real_date is not None:
         rows = _fill_missing_dates(rows, start_date, end_date, last_real_date, pre_rows)

@@ -18,7 +18,8 @@ class Feeder(BaseModel):
     disco: str
     band: str
     location: Optional[str] = None
-    street: Optional[str] = None
+    streets: List[str] = []
+    mapping_quality: str = "mapped"
     match_score: float
 
 
